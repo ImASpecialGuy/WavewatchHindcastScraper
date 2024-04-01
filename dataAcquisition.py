@@ -1,42 +1,116 @@
-from bs4 import BeautifulSoup
 import requests
-import os
 from pathlib import Path
 import threading
 import multiprocessing
 import argparse
+import time
+from alive_progress import alive_bar
 
 
-def printDates(start_month, number_of_months, args):
+def scrape_files(start_month, number_of_months, args):
     def download_file(file_url, download_folder):
-        response = requests.get(file_url, stream=True)
-        response.raise_for_status()  # Raise an exception for bad response codes
+        try:
+            response = requests.get(file_url, stream=True)
+            response.raise_for_status()  # Raise an exception for bad response codes
 
-        with open(str(download_folder / file_url.split('/')[-1]), "wb") as file:
-            for chunk in response.iter_content(chunk_size=8192):
-                # if chunk:  # Filter out keep-alive chunks
-                file.write(chunk)
+            file_path = Path(download_folder) / file_url.split('/')[-1]  # Using Pathlib for safer handling
+
+            with open(file_path, "wb") as file:
+                for chunk in response.iter_content(chunk_size=8192):
+                    # if chunk:  # Filter out keep-alive chunks (if necessary)
+                    file.write(chunk)
+            return True
+
+        except requests.exceptions.RequestException as e:
+            print(f"Error downloading file: {e}")
+
+        except OSError as e:
+            print(f"Error writing to file: {e}")
+
+        except Exception as e:
+            print(f"An unknown error occurred: {e}")
+
+    def download_gribs_files():
+        # prepare the folders
+        gribs_folder = base_path / Path(f"{date_string}/gribs")
+        gribs_folder.mkdir(parents=True, exist_ok=True)
+        for region in args.regions:
+            for feature in args.features:
+                # global region name differs in partition and gribs folders
+                if region == 'global':
+                    gribs_url = f"{base_url}{date_string}/gribs/multi_reanal.{regions_dictionary[region][0]}.{features_dictionary[feature]}.{date_string}.grb2"
+                else:
+                    gribs_url = f"{base_url}{date_string}/gribs/multi_reanal.{regions_dictionary[region]}.{features_dictionary[feature]}.{date_string}.grb2"
+                download_file(gribs_url, gribs_folder)
+
+                # Add it to the tally
+                with counter_lock:
+                    global processed_files
+                    processed_files += 1
+
+    def download_partition_files():
+        # prepare the folders
+        partitions_folder = base_path / Path(f"{date_string}/partitions")
+        partitions_folder.mkdir(parents=True, exist_ok=True)
+        for region in args.regions:
+            # global region name differs in partition and gribs folders
+            if region == 'global':
+                partitions_url = f"{base_url}{date_string}/partitions/multi_reanal.partition.{regions_dictionary[region][1]}.{date_string}.nc"
+            else:
+                partitions_url = f"{base_url}{date_string}/partitions/multi_reanal.partition.{regions_dictionary[region]}.{date_string}.nc"
+            download_file(partitions_url, partitions_folder)
+
+            # Add it to the tally
+            with counter_lock:
+                global processed_files
+                processed_files += 1
+
+    def download_buoy_files():
+        # Prepare the folders
+        buoy_folder = base_path / Path(f"{date_string}/points/buoys")
+        virtual_folder = base_path / Path(f"{date_string}/points/virtual")
+        buoy_folder.mkdir(parents=True, exist_ok=True)
+        virtual_folder.mkdir(parents=True, exist_ok=True)
+
+        # Construct the urls and download them into their respective folders
+        # Create a list of tuples [(url1, folder1), (url2, folder2), ...]
+        urls = [(f"{base_url}{date_string}/points/{type}/multi_reanal.{part}.{type}.{date_string}.tar.gz",
+                 base_path / Path(f"{date_string}/points/{type}"))
+                for part in ["buoys_part", "buoys_spec", "buoys_wmo"] for type in ["buoys", "virtual"]]
+        for url, folder in urls:
+            download_file(url, folder)
+            # Add it to the tally
+            with counter_lock:
+                global processed_files
+                processed_files += 1
 
     base_url = "https://polar.ncep.noaa.gov/waves/hindcasts/nopp-phase2/"
     base_path = Path(args.path)
     for month in range(start_month, start_month + number_of_months):
         # this is painful because January is month 1 and not month 0
         date_string = str((month - 1) // 12) + "{:02d}".format((month - 1) % 12 + 1)
-        gribs_folder = base_path / Path(f"{date_string}/gribs")
-        gribs_folder.mkdir(parents=True, exist_ok=True)
-        for region in args.regions:
-            for feature in args.features:
-                gribs_url = f"{base_url}{date_string}/gribs/multi_reanal.{regions_dictionary[region]}.{features_dictionary[feature]}.{date_string}.grb2"
-                download_file(gribs_url, gribs_folder)
+
+        # download all the data the user has specified
+        if not args.no_data:
+            download_gribs_files()
+        if args.partition_files:
+            download_partition_files()
+        if args.buoy_files:
+            download_buoy_files()
 
 
 def main():
-    # TODO: PROGRESS BAR
     def clamp_month(month):
         return max(1, min(month, 12))
 
     def clamp_year(year):
         return max(1979, min(year, 2009))
+
+    def calculate_number_of_files():
+        data_contribution = 0 if args.no_data else len(args.features)
+        partition_contribution = 1 if args.partition_files else 0
+        buoy_contribution = 6 if args.buoy_files else 0
+        return number_of_months * (buoy_contribution + len(args.regions) * (data_contribution + partition_contribution))
 
     parser = argparse.ArgumentParser()
     parser.add_argument("-s", "--start-date", type=str, default="01-1979",
@@ -44,25 +118,34 @@ def main():
     parser.add_argument("-e", "--end-date", type=str, default="12-2009",
                         help="Inclusive end date in format 'MM-YYYY' (min: 01-1979; max: 12-2009; default: 12-2009)")
     parser.add_argument("-p", "--path", type=str, default="data",
-                        help="Path relative to this script where data will be downloaded to (default: data")
+                        help="Path relative to this script where data will be downloaded to (default: data).")
     parser.add_argument(
         "-r", "--regions",
         nargs="+",
+        metavar="REGION",
         help="Space-separated list of regions to download (default: ALL)."
              "\n Available regions (alphabetical order): alaska, alaska-coastal, australia, "
              "australia-coastal, east-us, east-us-coastal, global, mediterranean, north-sea, "
-             "north-sea-coastal, nw-indian-ocean, pacific-islands, west-us-coastal, west-us",
+             "north-sea-coastal, nw-indian-ocean, pacific-islands, west-us, west-us-coastal",
         choices=regions_dictionary.keys(),
         default=regions_dictionary.keys(),
     )
     parser.add_argument(
         "-f", "--features",
         nargs="+",
+        metavar="feature",
         help="Space-separated list of features to download (default: ALL)."
              "\n Available features: wave-height, wind-speeds, wave-period, wave-direction",
         choices=features_dictionary.keys(),
         default=features_dictionary.keys(),
     )
+    parser.add_argument("-n", "--no-data", action="store_true",
+                        help="Do not download the 3-hourly wind and wave data (features specified by --features). "
+                             "Only use this when downloading partition and/or buoy files.")
+    parser.add_argument("-x", "--partition-files", action="store_true",
+                        help="Additionally download monthly bulk spectral estimates for every region.")
+    parser.add_argument("-y", "--buoy-files", action="store_true",
+                        help="Additionally download monthly buoy files (see NOAA's hindcast webpage for specifics).")
     args = parser.parse_args()
     start_month, start_year = map(int, args.start_date.split("-"))
     end_month, end_year = map(int, args.end_date.split("-"))
@@ -91,21 +174,44 @@ def main():
             threads_workload[i] += 1
             remaining_months -= 1
 
-        thread = threading.Thread(target=printDates, args=(start_month, threads_workload[i], args,))
+        thread = threading.Thread(target=scrape_files, args=(start_month, threads_workload[i], args,))
         thread.start()
         threads.append(thread)
         start_month += threads_workload[i]
 
-    # Wait for the threads to finish
+    # Show user the progress
+    total_files = calculate_number_of_files()
+    with alive_bar(total_files) as bar:
+        last_processed_files = 0
+        while True:
+            # Update the bar based on number of processed files since last iteration
+            for j in range(processed_files - last_processed_files):
+                bar()
+            last_processed_files = processed_files
+
+            all_done = True  # Assume all threads are done
+            for t in threads:
+                if t.is_alive():
+                    all_done = False  # If any thread is alive, not all are done
+                    break
+            if all_done:
+                break  # Exit the while loop if all threads are finished
+
+            time.sleep(1)  # Doesn't need to be the fastest bar in the world
+
+    # Merge threads with main
     for thread in threads:
         thread.join()
 
 
+counter_lock = threading.Lock()
+processed_files = 0
 regions_dictionary = {"alaska": "ak_4m",
                       "alaska-coastal": "ak_10m",
                       "east-us-coastal": "ecg_4m",
                       "east-us": "ecg_10m",
-                      "global": "glo_30m",
+                      # grib folder uses "glo_30m_ext" and partitions folder uses "glo_30m"
+                      "global": ("glo_30m_ext", "glo_30m"),
                       "mediterranean": "med_10m",
                       "north-sea-coastal": "nsb_4m",
                       "north-sea": "nsb_10m",
