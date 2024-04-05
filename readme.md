@@ -8,6 +8,8 @@ A map detailing where all the various regions are can be found in figure 3 of th
 
 Note: the progress bar includes a naive time estimate that assumes all files are of equal size. Only trust its estimations when just downloading the standard 3-hourly data.
 
+Note 2: before downloading a file, there is a check if the file already exists to prevent overwriting. If you want the files to be overwritten, you would have to delete them.
+
 ## Usage/Examples
 
 ### Download all features for several regions from Jan 2000 to Dec 2005
