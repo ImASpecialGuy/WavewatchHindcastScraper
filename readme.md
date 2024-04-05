@@ -2,7 +2,7 @@
 # WAVEWATCH III® 30-year Hindcast Phase 2 Data Downloading Utility
 
 This project is a utility to help with downloading the files in https://polar.ncep.noaa.gov/waves/hindcasts/nopp-phase2.php, and as such, you should go there to find out what the data is and how it is formatted.  
-Without this utility, you would have to go into https://polar.ncep.noaa.gov/waves/hindcasts/nopp-phase2/ and download a file for every month, for every region, and for every feature.  
+Without this utility, you would have to go into https://polar.ncep.noaa.gov/waves/hindcasts/nopp-phase2/ and download a file for every month in every year, for every region, and for every feature.  
 A map detailing where all the various regions are can be found in figure 3 of the validation paper (https://www.sciencedirect.com/science/article/pii/S1463500312001047?ref=cra_js_challenge&fr=RR-1).  
 
 
