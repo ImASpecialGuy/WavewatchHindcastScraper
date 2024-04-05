@@ -1,3 +1,5 @@
+import os.path
+
 import requests
 from pathlib import Path
 import threading
@@ -17,7 +19,7 @@ def scrape_files(start_month, number_of_months, args):
 
             with open(file_path, "wb") as file:
                 for chunk in response.iter_content(chunk_size=8192):
-                    # if chunk:  # Filter out keep-alive chunks (if necessary)
+                    # If chunk:  # Filter out keep-alive chunks (if necessary)
                     file.write(chunk)
             return True
 
@@ -31,17 +33,21 @@ def scrape_files(start_month, number_of_months, args):
             print(f"An unknown error occurred: {e}")
 
     def download_gribs_files():
-        # prepare the folders
+        # Prepare the folders
         gribs_folder = base_path / Path(f"{date_string}/gribs")
         gribs_folder.mkdir(parents=True, exist_ok=True)
         for region in args.regions:
             for feature in args.features:
-                # global region name differs in partition and gribs folders
+                # Global region name differs in partition and gribs folders
                 if region == 'global':
                     gribs_url = f"{base_url}{date_string}/gribs/multi_reanal.{regions_dictionary[region][0]}.{features_dictionary[feature]}.{date_string}.grb2"
                 else:
                     gribs_url = f"{base_url}{date_string}/gribs/multi_reanal.{regions_dictionary[region]}.{features_dictionary[feature]}.{date_string}.grb2"
-                download_file(gribs_url, gribs_folder)
+
+                # Only download if the file does not exist yet
+                file_name = gribs_folder / Path(f"multi_reanal.{regions_dictionary[region][0]}.{features_dictionary[feature]}.{date_string}.grb2")
+                if not os.path.isfile(file_name):
+                    download_file(gribs_url, gribs_folder)
 
                 # Add it to the tally
                 with counter_lock:
@@ -58,7 +64,11 @@ def scrape_files(start_month, number_of_months, args):
                 partitions_url = f"{base_url}{date_string}/partitions/multi_reanal.partition.{regions_dictionary[region][1]}.{date_string}.nc"
             else:
                 partitions_url = f"{base_url}{date_string}/partitions/multi_reanal.partition.{regions_dictionary[region]}.{date_string}.nc"
-            download_file(partitions_url, partitions_folder)
+
+            # Only download if the file does not exist yet
+            file_name = partitions_folder / Path(f"multi_reanal.partition.{regions_dictionary[region][1]}.{date_string}.nc")
+            if not os.path.isfile(file_name):
+                download_file(partitions_url, partitions_folder)
 
             # Add it to the tally
             with counter_lock:
@@ -77,8 +87,10 @@ def scrape_files(start_month, number_of_months, args):
         urls = [(f"{base_url}{date_string}/points/{type}/multi_reanal.{part}.{type}.{date_string}.tar.gz",
                  base_path / Path(f"{date_string}/points/{type}"))
                 for part in ["buoys_part", "buoys_spec", "buoys_wmo"] for type in ["buoys", "virtual"]]
-        for url, folder in urls:
-            download_file(url, folder)
+        for url, file_name in urls:
+            # Only download if the file does not exist yet
+            if not os.path.isfile(file_name):
+                download_file(url, file_name)
             # Add it to the tally
             with counter_lock:
                 global processed_files
