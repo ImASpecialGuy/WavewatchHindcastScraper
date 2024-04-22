@@ -41,11 +41,13 @@ def scrape_files(start_month, number_of_months, args):
                 # Global region name differs in partition and gribs folders
                 if region == 'global':
                     gribs_url = f"{base_url}{date_string}/gribs/multi_reanal.{regions_dictionary[region][0]}.{features_dictionary[feature]}.{date_string}.grb2"
+                    # Only download if the file does not exist yet
+                    file_name = gribs_folder / Path(f"multi_reanal.{regions_dictionary[region][0]}.{features_dictionary[feature]}.{date_string}.grb2")
                 else:
                     gribs_url = f"{base_url}{date_string}/gribs/multi_reanal.{regions_dictionary[region]}.{features_dictionary[feature]}.{date_string}.grb2"
+                    # Only download if the file does not exist yet
+                    file_name = gribs_folder / Path(f"multi_reanal.{regions_dictionary[region]}.{features_dictionary[feature]}.{date_string}.grb2")
 
-                # Only download if the file does not exist yet
-                file_name = gribs_folder / Path(f"multi_reanal.{regions_dictionary[region][0]}.{features_dictionary[feature]}.{date_string}.grb2")
                 if not os.path.isfile(file_name):
                     download_file(gribs_url, gribs_folder)
 
@@ -62,11 +64,13 @@ def scrape_files(start_month, number_of_months, args):
             # global region name differs in partition and gribs folders
             if region == 'global':
                 partitions_url = f"{base_url}{date_string}/partitions/multi_reanal.partition.{regions_dictionary[region][1]}.{date_string}.nc"
+                # Only download if the file does not exist yet
+                file_name = partitions_folder / Path(f"multi_reanal.partition.{regions_dictionary[region][1]}.{date_string}.nc")
             else:
                 partitions_url = f"{base_url}{date_string}/partitions/multi_reanal.partition.{regions_dictionary[region]}.{date_string}.nc"
+                # Only download if the file does not exist yet
+                file_name = partitions_folder / Path(f"multi_reanal.partition.{regions_dictionary[region]}.{date_string}.nc")
 
-            # Only download if the file does not exist yet
-            file_name = partitions_folder / Path(f"multi_reanal.partition.{regions_dictionary[region][1]}.{date_string}.nc")
             if not os.path.isfile(file_name):
                 download_file(partitions_url, partitions_folder)
 
