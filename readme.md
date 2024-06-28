@@ -20,7 +20,7 @@ python dataAcquisition.py -r alaska alaska-coastal pacific-islands -s 01-2000 -e
 
 ### Download specific features for the global region from Jan 1979 to Dec 2009
 ```bash
-python dataAcquisition.py -regions global -f wave-height wind-speeds
+python dataAcquisition.py --regions global -f wave-height wind-speeds
 ```
 
 ### Download bulk spectral estimates for all regions
